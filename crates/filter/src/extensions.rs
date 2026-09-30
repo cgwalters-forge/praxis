@@ -39,11 +39,17 @@ use bytes::Bytes;
 /// authentication succeeded and produced a non-empty subject identifier; it
 /// does not by itself mean that every subsequent operation was authorized.
 ///
-/// The fields are intentionally read-only outside this crate. Only trusted
-/// built-in producers can construct the value, while external filters can
-/// inspect it through the getters below. The type deliberately does not
-/// implement serialization so wire adapters must choose an explicit output
-/// format rather than serializing authentication state wholesale.
+/// The fields are read-only once built. Authentication filters construct the
+/// value with [`AuthenticatedIdentity::new`] and insert it into
+/// [`RequestExtensions`] after verifying the caller; this includes filters
+/// outside Praxis core, such as those a downstream binary registers with
+/// [`SecurityClass::Security`]. Consumers must not treat the value as more
+/// trustworthy than the filters in the chain before them. The type
+/// deliberately does not implement serialization so wire adapters must choose
+/// an explicit output format rather than serializing authentication state
+/// wholesale.
+///
+/// [`SecurityClass::Security`]: crate::SecurityClass::Security
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthenticatedIdentity {
     /// Stable identifier of the authenticated subject.
@@ -59,9 +65,32 @@ pub struct AuthenticatedIdentity {
 impl AuthenticatedIdentity {
     /// Construct a raw-credential-free identity from trusted, normalized parts.
     ///
+    /// Only an authentication filter should call this, once it has verified
+    /// the caller, and it should register itself with
+    /// [`SecurityClass::Security`] so that operators can see which filters
+    /// establish identity.
+    ///
     /// Returns `None` when authentication did not produce a subject ID.
-    #[cfg(any(feature = "basic-auth-filter", feature = "policy-engine", test))]
-    pub(crate) fn new(
+    ///
+    /// ```
+    /// use praxis_filter::{AuthenticatedIdentity, RequestExtensions};
+    ///
+    /// let identity = AuthenticatedIdentity::new(
+    ///     "run-42".to_owned(),
+    ///     ["agent".to_owned()],
+    ///     std::iter::empty(),
+    ///     std::iter::empty(),
+    /// )
+    /// .expect("non-empty subject");
+    ///
+    /// let mut extensions = RequestExtensions::new();
+    /// extensions.insert(identity);
+    /// let published = extensions.get::<AuthenticatedIdentity>().expect("inserted");
+    /// assert_eq!(published.subject_id(), "run-42");
+    /// ```
+    ///
+    /// [`SecurityClass::Security`]: crate::SecurityClass::Security
+    pub fn new(
         subject_id: String,
         roles: impl IntoIterator<Item = String>,
         teams: impl IntoIterator<Item = String>,

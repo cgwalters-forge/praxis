@@ -410,6 +410,16 @@ Never blindly trust `X-Forwarded-For` or
 `X-Forwarded-Proto`. Attackers spoof these unless trusted
 upstream sources are explicitly defined.
 
+### Publish the caller from authentication filters
+
+An authentication filter should, once it has verified the
+caller, insert an `AuthenticatedIdentity` into
+`ctx.extensions` (`AuthenticatedIdentity::new`), and
+register itself with `SecurityClass::Security`. Filters
+after it read the caller from there, such as a token
+budget keyed on `authenticated_subject`, without knowing
+how it was authenticated.
+
 ### Keep filters stateless when possible
 
 Prefer reading all configuration at construction time
